@@ -1,0 +1,51 @@
+name: CI/CD Pipeline for EKS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: Log in to DockerHub
+    - name: Log in to DockerHub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    # Step 3: Build and push Docker image
+    - name: Build and Push Docker Image
+      run: |
+        docker build -t ${{ secrets.DOCKER_REPOSITORY }}:latest .
+        docker push ${{ secrets.DOCKER_REPOSITORY }}:latest
+
+  deploy:
+    name: Deploy to EKS
+    needs: build_and_push
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: Configure AWS CLI
+    - name: Configure AWS CLI
+      run: |
+        aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    # Step 3: Deploy Kubernetes manifests
+    - name: Deploy to EKS
+      run: |
+        kubectl apply -f kubernetes/deployment.yaml
+        kubectl apply -f kubernetes/service.yaml
+        kubectl rollout status deployment my-app
